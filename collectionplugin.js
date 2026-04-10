@@ -1,5 +1,5 @@
 // =============================================================================
-// Filtered Views v.1.0.0
+// Filtered Views v.1.0.1
 // -----------------------------------------------------------------------------
 // Collection panel nav button opens a modal to create, edit, and delete
 // filtered views. Persists via this.collection.getConfiguration() /
@@ -74,7 +74,7 @@ class Plugin extends CollectionPlugin {
             <div class="tk-fv-modal" role="dialog" aria-modal="true">
                 <div class="tk-fv-header">
                     <div class="tk-fv-title">
-                        <i class="ti ti-filter"></i>
+                        <i class="ti ti-template"></i>
                         Filtered Views
                     </div>
                     <button class="tk-fv-close" aria-label="Close">&times;</button>
@@ -164,6 +164,11 @@ class Plugin extends CollectionPlugin {
                                         <i class="ti ti-chevron-right tk-fv-fields-chevron" aria-hidden="true"></i>
                                         <span>Select visible fields</span>
                                     </summary>
+                                    <div class="tk-fv-fields-toolbar">
+                                        <button type="button" class="tk-fv-link-action tk-fv-fields-select-all">all</button>
+                                        <span class="tk-fv-fields-toolbar-dot" aria-hidden="true">·</span>
+                                        <button type="button" class="tk-fv-link-action tk-fv-fields-select-none">none</button>
+                                    </div>
                                     <div class="tk-fv-fields-list" data-role="fields-list"></div>
                                 </details>
                                 <div class="tk-fv-help">
@@ -232,6 +237,28 @@ class Plugin extends CollectionPlugin {
             wrapper.appendChild(text);
             fieldsListEl.appendChild(wrapper);
         });
+
+        const fieldsWrapEl = fieldsListEl.closest(".tk-fv-fields-wrap");
+        fieldsWrapEl
+            .querySelector(".tk-fv-fields-select-all")
+            .addEventListener("click", (e) => {
+                e.preventDefault();
+                overlay
+                    .querySelectorAll('[name="visibleField"]')
+                    .forEach((cb) => {
+                        cb.checked = true;
+                    });
+            });
+        fieldsWrapEl
+            .querySelector(".tk-fv-fields-select-none")
+            .addEventListener("click", (e) => {
+                e.preventDefault();
+                overlay
+                    .querySelectorAll('[name="visibleField"]')
+                    .forEach((cb) => {
+                        cb.checked = false;
+                    });
+            });
 
         // Stop ALL key events on form controls from bubbling up to Thymer's
         // global keyboard shortcut handler -- otherwise space, slash, etc. get
@@ -361,13 +388,26 @@ class Plugin extends CollectionPlugin {
                 return;
             }
 
-            saveBtn.disabled = true;
-            saveBtn.textContent = this._fvEditingId ? "Updating..." : "Saving...";
-
-            // Read selected field IDs from the visible-fields checkboxes
             const fieldIds = [
                 ...overlay.querySelectorAll('[name="visibleField"]:checked'),
             ].map((cb) => cb.value);
+
+            if (fieldIds.length === 0) {
+                this.ui.addToaster({
+                    title: "Select at least one field",
+                    message:
+                        'Each view needs at least one visible column. Open "Select visible fields", then use all or check the fields you want.',
+                    dismissible: true,
+                    autoDestroyTime: 6000,
+                });
+                const fieldsWrap = overlay.querySelector(".tk-fv-fields-wrap");
+                if (fieldsWrap) fieldsWrap.open = true;
+                overlay.querySelector('[name="visibleField"]')?.focus();
+                return;
+            }
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = this._fvEditingId ? "Updating..." : "Saving...";
 
             const formData = {
                 label,
@@ -569,6 +609,17 @@ class Plugin extends CollectionPlugin {
             return false;
         }
 
+        if (!Array.isArray(formData.fieldIds) || formData.fieldIds.length === 0) {
+            this.ui.addToaster({
+                title: "Select at least one field",
+                message:
+                    "A view must include at least one visible column.",
+                dismissible: true,
+                autoDestroyTime: 5000,
+            });
+            return false;
+        }
+
         const newView = {
             id: `${this._FV_ID_PREFIX}${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
             label: formData.label,
@@ -576,13 +627,10 @@ class Plugin extends CollectionPlugin {
                 ? `Filtered: ${formData.query}`
                 : "Filtered view",
             type: formData.type,
-            icon: "ti-filter",
+            icon: "ti-template",
             shown: true,
             read_only: false,
-            field_ids:
-                Array.isArray(formData.fieldIds) && formData.fieldIds.length > 0
-                    ? formData.fieldIds
-                    : activeFields.map((f) => f.id),
+            field_ids: formData.fieldIds,
             sort_field_id: formData.sortField || activeFields[0].id,
             sort_dir: formData.sortDir || "asc",
             group_by_field_id: formData.groupBy,
@@ -768,6 +816,17 @@ class Plugin extends CollectionPlugin {
         const existing = conf.views[idx];
         const activeFields = (conf.fields || []).filter((f) => f.active);
 
+        if (!Array.isArray(formData.fieldIds) || formData.fieldIds.length === 0) {
+            this.ui.addToaster({
+                title: "Select at least one field",
+                message:
+                    "A view must include at least one visible column.",
+                dismissible: true,
+                autoDestroyTime: 5000,
+            });
+            return false;
+        }
+
         // Build the updated view by merging existing fields with form values.
         // We preserve id, shown, read_only, icon, and any unknown keys the
         // existing view had -- this matters for forward-compat with future
@@ -779,10 +838,7 @@ class Plugin extends CollectionPlugin {
                 ? `Filtered: ${formData.query}`
                 : "Filtered view",
             type: formData.type,
-            field_ids:
-                Array.isArray(formData.fieldIds) && formData.fieldIds.length > 0
-                    ? formData.fieldIds
-                    : activeFields.map((f) => f.id),
+            field_ids: formData.fieldIds,
             sort_field_id:
                 formData.sortField || existing.sort_field_id || activeFields[0].id,
             sort_dir: formData.sortDir || "asc",
@@ -1423,6 +1479,33 @@ class Plugin extends CollectionPlugin {
             }
             .tk-fv-fields-wrap[open] > .tk-fv-fields-toggle .tk-fv-fields-chevron {
                 transform: rotate(90deg);
+            }
+            .tk-fv-fields-toolbar {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                flex-wrap: wrap;
+                padding: 6px 10px 0 10px;
+                font-size: 11px;
+            }
+            .tk-fv-fields-toolbar-dot {
+                opacity: 0.45;
+                user-select: none;
+            }
+            .tk-fv-link-action {
+                background: none;
+                border: none;
+                padding: 0;
+                margin: 0;
+                cursor: pointer;
+                font-size: 11px;
+                font-family: inherit;
+                color: #7a7a8c;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+            }
+            .tk-fv-link-action:hover {
+                color: #5c6cf2;
             }
             .tk-fv-fields-list {
                 display: flex;

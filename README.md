@@ -1,6 +1,6 @@
 # Thymer filtered views (collection plugin)
 
-**Version:** 1.0.0 (see `package.json`)
+**Version:** 1.0.1 (see `package.json`)
 
 A Thymer **collection plugin** that adds a **Views** control to the collection panel. It opens a modal to **create, edit, and delete** filtered views for that collection by updating the collection configuration (same ideas as Thymer’s native views: type, query, sort, visible columns, board group-by).
 
